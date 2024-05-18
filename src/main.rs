@@ -3,12 +3,18 @@ mod db_controller;
 use std::collections::HashMap;
 use std::io;
 use std::io::Write;
+use rusqlite::Connection;
+use crate::db_controller::{initialise_database, load_hashmap_from_db};
 
-fn main() {
+fn main() -> rusqlite::Result<()> {
+    let connection = Connection::open("database.db")?;
+    initialise_database(&connection)?;
+
     let mut hashmap: HashMap<String, i32> = HashMap::new();
-    initialise_hashmap(&mut hashmap);
+    load_hashmap_from_db(&connection, &mut hashmap)?;
 
     menu_sel(&mut hashmap);
+    Ok(())
 }
 
 fn menu_sel(map: &mut HashMap<String, i32>) {
@@ -23,12 +29,6 @@ fn menu_sel(map: &mut HashMap<String, i32>) {
             _ => println!("Wrong choice!")
         }
     }
-}
-
-fn initialise_hashmap(map: &mut HashMap<String, i32>) {
-    map.insert("apple".to_string(), 10);
-    map.insert("banana".to_string(), 20);
-    map.insert("orange".to_string(), 15);
 }
 
 fn add_new_to_hashmap(map: &mut HashMap<String, i32>) {
