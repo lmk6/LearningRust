@@ -67,10 +67,16 @@ impl Database {
     }
 
     pub fn remove_entry_by_key(&self, key: &str) -> Result<()> {
-        self.connection.execute(
-            "DELETE FROM entries WHERE key = ?1",
-            params![key]
+        let mut statement = self.connection.prepare(
+            "SELECT COUNT(*) FROM entries WHERE key = ?1"
         )?;
-        Ok(())
+        let count: i32 = statement.query_row(params![key], |row| row.get(0))?;
+
+        if count > 0 {
+            self.connection.execute("DELETE FROM entries WHERE key = ?1", params![key])?;
+            Ok(())
+        } else {
+            Err(rusqlite::Error::QueryReturnedNoRows)
+        }
     }
 }
