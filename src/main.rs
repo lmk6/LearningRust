@@ -1,15 +1,34 @@
 mod db_controller;
+mod handlers;
 
 use std::collections::HashMap;
 use std::io;
 use std::io::Write;
+use std::sync::Arc;
 use crate::db_controller::Database;
 
-fn main() -> rusqlite::Result<()> {
+#[derive(Clone)]
+struct AppState {
+    database: Arc<Database>,
+}
+
+#[async_std::main]
+async fn main() -> tide::Result<()> {
     let db = Database::new("my_database.db")?;
     db.initialise_database()?;
 
-    menu_sel(&db);
+    let state = AppState { database: Arc::new(db) };
+    let mut app = tide::with_state(state);
+
+    app.at("/entries")
+        .post(handlers::add_entry)
+        .get(handlers::get_entries);
+    app.at("/entries/:name")
+        .get(handlers::get_entry)
+        .delete(handlers::delete_entry)
+        .put(handlers::update_entry);
+
+    app.listen("127.0.0.1:8080").await?;
     Ok(())
 }
 
@@ -33,7 +52,7 @@ fn add_new_entry(db: &Database) {
     let mut new_key = String::new();
     fill_str_input_loop(&mut new_key, "Enter the new key: ");
     let new_value = get_int_input_loop();
-    match db.add_entry_to_db(&new_key, new_value) {
+    match db.add_entry(&new_key, new_value) {
         Ok(()) => println!("New Entry Created!"),
         Err(err) => println!("Error: {}", err),
     }
@@ -41,13 +60,13 @@ fn add_new_entry(db: &Database) {
 
 fn print_all_entries(db: &Database) {
     let mut map: HashMap<String, i32> = HashMap::new();
-    match db.load_hashmap_from_db(&mut map) {
+    match db.get_all_entries() {
         Ok(()) => {
             println!("Hash Map's contents are:");
             for (key, value) in map {
                 println!("{}: {}", key, value);
             }
-        },
+        }
         Err(error) => println!("Error Encountered: {}", error),
     };
 }
@@ -83,7 +102,7 @@ fn remove_entry(db: &Database) {
     let mut key = String::new();
     fill_str_input_loop(&mut key, "Enter key to delete: ");
 
-    match db.remove_entry_by_key(&key) {
+    match db.remove_entry(&key) {
         Ok(()) => println!("Deletion Successful!"),
         Err(err) => println!("Deletion Failed: {}", err),
     }

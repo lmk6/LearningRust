@@ -1,5 +1,10 @@
-use rusqlite::{params, Connection, Result};
+use rusqlite::{params, Connection, Result, OptionalExtension};
 use std::collections::HashMap;
+
+pub struct Entry {
+    pub name: String,
+    pub value: i32,
+}
 
 pub struct Database {
     connection: Connection,
@@ -44,20 +49,34 @@ impl Database {
         Ok(())
     }
 
-    pub fn load_hashmap_from_db(&self, hash_map: &mut HashMap<String, i32>) -> Result<()> {
+    pub fn get_all_entries(&self) -> Result<HashMap<String, i32>> {
         let mut statement = self.connection.prepare("SELECT key, value FROM entries")?;
         let iterator = statement.query_map([], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, i32>(1)?))
         })?;
 
+        let mut map = HashMap::new();
         for entry in iterator {
             let (key, value): (String, i32) = entry?;
-            hash_map.insert(key, value);
+            map.insert(key, value);
         }
-        Ok(())
+        Ok(map)
     }
 
-    pub fn add_entry_to_db(&self, key: &str, value: i32) -> Result<()> {
+    pub fn get_entry(&self, name: &str) -> Result<Option<Entry>> {
+        let mut stmt = self.connection.prepare("\
+        Select name, price FROM groceries WHERE name = ?1")?;
+        let entry = stmt.query_row(params![name], |row| {
+            Ok(Entry {
+                name: row.get(0)?,
+                value: row.get(1)?,
+            })
+        }).optional()?;
+
+        Ok(entry)
+    }
+
+    pub fn add_entry(&self, key: &str, value: i32) -> Result<()> {
         self.connection.execute(
             "INSERT INTO entries (key, value) VALUES (?1, ?2)\
             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
@@ -66,17 +85,11 @@ impl Database {
         Ok(())
     }
 
-    pub fn remove_entry_by_key(&self, key: &str) -> Result<()> {
-        let mut statement = self.connection.prepare(
-            "SELECT COUNT(*) FROM entries WHERE key = ?1"
+    pub fn remove_entry(&self, key: &str) -> Result<usize> {
+        let deleted = self.connection.execute(
+            "DELETE FROM entries WHERE name = ?1",
+            params![key],
         )?;
-        let count: i32 = statement.query_row(params![key], |row| row.get(0))?;
-
-        if count > 0 {
-            self.connection.execute("DELETE FROM entries WHERE key = ?1", params![key])?;
-            Ok(())
-        } else {
-            Err(rusqlite::Error::QueryReturnedNoRows)
-        }
+        Ok(deleted)
     }
 }
